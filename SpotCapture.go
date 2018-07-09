@@ -139,7 +139,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Println("Waiting for you to login in the opened browser window!")
+		fmt.Println("Waiting for you to log in in the opened browser window!")
 
 		token := <-done
 
