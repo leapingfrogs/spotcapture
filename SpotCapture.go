@@ -11,6 +11,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
+	"log"
+	"path"
 )
 
 // Used to persist token and playlist id
@@ -20,21 +23,27 @@ type SpotCaptureConfig struct {
 	UserId     string
 }
 
-func loadConfig() *SpotCaptureConfig {
-	raw, err := ioutil.ReadFile("/Users/idavies/.spotcapture")
+func configPath() string {
+	usr, err := user.Current()
 	if err != nil {
-		fmt.Println("Failed to open /Users/idavies/.spotcapture")
+		log.Fatal(err)
+	}
+	return path.Join(usr.HomeDir, ".spotcapture")
+}
+
+func loadConfig() *SpotCaptureConfig {
+	raw, err := ioutil.ReadFile(configPath())
+	if err != nil {
 		return nil
 	}
 
 	var config *SpotCaptureConfig
 	err = json.Unmarshal(raw, &config)
 	if err != nil {
-		fmt.Println("Failed to parse /Users/idavies/.spotcapture")
+		fmt.Printf("Failed to parse %s\n", configPath())
 		removeConfig()
 		return nil
 	}
-	fmt.Printf("Config: %s\n", config)
 	return config
 }
 
@@ -44,14 +53,14 @@ func saveConfig(config *SpotCaptureConfig) {
 		fmt.Printf("Failed to marshal config. %s\n", err.Error())
 	}
 
-	err = ioutil.WriteFile("/Users/idavies/.spotcapture", raw, 0644)
+	err = ioutil.WriteFile(configPath(), raw, 0644)
 	if err != nil {
 		fmt.Printf("Failed to persist config: %s\n", err.Error())
 	}
 }
 
 func removeConfig() {
-	err := os.Remove("/Users/idavies/.spotcapture")
+	err := os.Remove(configPath())
 	if err != nil {
 		fmt.Println("Unable to remove invalid configuration file!")
 		os.Exit(1)
@@ -61,7 +70,6 @@ func removeConfig() {
 func handleAuth(done chan *oauth2.Token, state string, auth spotify.Authenticator) {
 	p := pat.New()
 	p.Get("/auth/spotify/callback", func(res http.ResponseWriter, req *http.Request) {
-		fmt.Printf("Handling auth callback\n")
 		// use the same state string here that you used to generate the URL
 		token, err := auth.Token(state, req)
 		if err != nil {
@@ -135,8 +143,6 @@ func main() {
 
 		token := <-done
 
-		fmt.Println("Logged in successfully")
-
 		client := auth.NewClient(token)
 
 		config := new(SpotCaptureConfig)
@@ -145,8 +151,6 @@ func main() {
 		config.PlaylistId = createPlaylist(client, config.UserId, "SpotCapture")
 
 		saveConfig(config)
-
-		fmt.Println("Configuration created!")
 	}
 
 	loaded = loadConfig()
@@ -156,10 +160,10 @@ func main() {
 	if track != nil && track.Playing && track.Item != nil {
 		if *removeFlag {
 			client.RemoveTracksFromPlaylist(loaded.UserId, loaded.PlaylistId, track.Item.ID)
-			fmt.Printf("Sucessfully removed '%s - %s' to your playlist", track.Item.Name, track.Item.Artists)
+			fmt.Printf("Sucessfully removed '%s' from your playlist\n", track.Item.Name)
 		} else {
 			client.AddTracksToPlaylist(loaded.UserId, loaded.PlaylistId, track.Item.ID)
-			fmt.Printf("Sucessfully added '%s - %s' to your playlist", track.Item.Name, track.Item.Artists)
+			fmt.Printf("Sucessfully added '%s' to your playlist\n", track.Item.Name)
 		}
 	}
 }
