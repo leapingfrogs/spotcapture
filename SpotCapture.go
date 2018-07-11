@@ -97,6 +97,31 @@ func createPlaylist(client spotify.Client, userId string, playlistName string) s
 	return playlist.ID
 }
 
+func trackPresent(client spotify.Client, userId string, playlistId spotify.ID, trackId spotify.ID) bool {
+	return trackPresentOffset(client, userId, playlistId, trackId, 0)
+}
+
+func trackPresentOffset(client spotify.Client, userId string, playlistId spotify.ID, trackId spotify.ID, offset int) bool {
+	limit := 50
+	options := spotify.Options{Limit: &limit, Offset: &offset}
+
+	tracks, err := client.GetPlaylistTracksOpt(userId, playlistId, &options, "");
+	if err != nil {
+		return false
+	}
+
+	for _, item := range tracks.Tracks {
+		if trackId == item.Track.ID {
+			return true
+		}
+	}
+	if tracks.Next == "" {
+		return false
+	} else {
+		return trackPresentOffset(client, userId, playlistId, trackId, offset+limit)
+	}
+}
+
 func currentTrack(client spotify.Client) *spotify.CurrentlyPlaying {
 	currentlyPlaying, err := client.PlayerCurrentlyPlaying()
 	if err != nil {
@@ -108,12 +133,12 @@ func currentTrack(client spotify.Client) *spotify.CurrentlyPlaying {
 }
 
 func currentUserId(client spotify.Client) string {
-	user, err := client.CurrentUser()
+	u, err := client.CurrentUser()
 	if err != nil {
 		fmt.Printf("Couldn't get current user: %s\n", err.Error())
 		os.Exit(1)
 	}
-	return user.ID
+	return u.ID
 }
 
 func main() {
@@ -162,8 +187,12 @@ func main() {
 			client.RemoveTracksFromPlaylist(loaded.UserId, loaded.PlaylistId, track.Item.ID)
 			fmt.Printf("Sucessfully removed '%s' from your playlist\n", track.Item.Name)
 		} else {
-			client.AddTracksToPlaylist(loaded.UserId, loaded.PlaylistId, track.Item.ID)
-			fmt.Printf("Sucessfully added '%s' to your playlist\n", track.Item.Name)
+			if (trackPresent(client, loaded.UserId, loaded.PlaylistId, track.Item.ID)) {
+				fmt.Println("ಠ_ಠ That track is already in your playlist!")
+			} else {
+				client.AddTracksToPlaylist(loaded.UserId, loaded.PlaylistId, track.Item.ID)
+				fmt.Printf("Sucessfully added '%s' to your playlist\n", track.Item.Name)
+			}
 		}
 	}
 }
